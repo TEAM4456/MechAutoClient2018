@@ -7,11 +7,33 @@ import edu.wpi.first.networktables.EntryListenerFlags;
 
 public class DSAutoClient {
 	
+	private static NetworkTableInstance inst;
+	
+	private static NetworkTable autonomousData;
+	private static NetworkTable robotData;
+	private static NetworkTable bufferData;
+	
 	public static void main(String[] args) {
 		
-		NetworkTableInstance inst = NetworkTableInstance.getDefault();
+		inst = NetworkTableInstance.getDefault();
 		
-		NetworkTable table = inst.getTable("AutoRecordings");
+		autonomousData = inst.getTable("AutonomousData");
+		robotData = autonomousData.getSubTable("RobotState");
+		bufferData = autonomousData.getSubTable("BufferData");
+		
+		inst.startClientTeam(4456);
+		
+		NetworkTableEntry testEntry = bufferData.getEntry("test");
+		
+		try {
+			while (true) {
+				System.out.println(testEntry.getDouble(0));
+				Thread.sleep(100);
+			}
+		} catch (InterruptedException e) {
+			System.out.println("Interrupted!");
+			return;
+		}
 		
 	}
 	
