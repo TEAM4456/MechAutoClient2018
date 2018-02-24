@@ -1,9 +1,9 @@
 package org.mechcadets;
 
+import edu.wpi.first.networktables.EntryListenerFlags;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
-import edu.wpi.first.networktables.EntryListenerFlags;
 
 public class DSAutoClient {
 	
@@ -13,6 +13,10 @@ public class DSAutoClient {
 	private static NetworkTable robotData;
 	private static NetworkTable bufferData;
 	
+	private static NetworkTableEntry robotTickEntry;
+	
+	private static int tick;
+	
 	public static void main(String[] args) {
 		
 		inst = NetworkTableInstance.getDefault();
@@ -21,20 +25,31 @@ public class DSAutoClient {
 		robotData = autonomousData.getSubTable("RobotState");
 		bufferData = autonomousData.getSubTable("BufferData");
 		
+		robotTickEntry = robotData.getEntry("tick");
+		
 		inst.startClientTeam(4456);
 		
-		NetworkTableEntry testEntry = bufferData.getEntry("test");
+		waitForConnection(); // maybe replace with inst.addConnectionListener(...);
 		
+		tick = (int)robotTickEntry.getDouble(0);
+		
+		robotTickEntry.addListener(event -> {
+			System.out.println("Tick changed: " + event.value.getDouble());
+		}, EntryListenerFlags.kNew | EntryListenerFlags.kUpdate);
+		
+	}
+	
+	private static void waitForConnection() {
 		try {
-			while (true) {
-				System.out.println(testEntry.getDouble(0));
+			while (!inst.isConnected()) {
+				System.out.println("Waiting for connection...");
 				Thread.sleep(100);
 			}
-		} catch (InterruptedException e) {
-			System.out.println("Interrupted!");
-			return;
+			System.out.println("Connected!");
+		} catch (InterruptedException ex) {
+			System.out.println("Interrupted while waiting for connection.\nExiting...");
+			System.exit(0);
 		}
-		
 	}
 	
 }
