@@ -1,4 +1,4 @@
-package org.mechcadets;
+package org.mechcadets.auto2018;
 
 import java.util.Scanner;
 
@@ -13,19 +13,29 @@ public class DSAutoClient {
 	
 	private static NetworkTableInstance inst;
 	
+	private static int tick;
+	
 	private NetworkTable autonomousData;
 	private NetworkTable robotData;
 	private NetworkTable bufferData;
 	
 	private NetworkTableEntry pingEntry;
 	private NetworkTableEntry robotTickEntry;
+	private NetworkTableEntry syncStopTickEntry;
+	private NetworkTableEntry tickIntervalMsEntry;
 	private NetworkTableEntry robotTickTimerEntry;
-	
-	private static int tick;
+	private NetworkTableEntry bufferSizeEntry;
+	private NetworkTableEntry talonModesEntry;
+	private NetworkTableEntry managerModeEntry;
+	private NetworkTableEntry robotReadyEntry;
+	private NetworkTableEntry clientIsReadyEntry;
+	private NetworkTableEntry recordingNameEntry;
 	
 	public static void main(String[] args) { new DSAutoClient().run(); }
 	
 	private void run() {
+		
+		tick = 0;
 		
 		inst = NetworkTableInstance.getDefault();
 		
@@ -35,8 +45,15 @@ public class DSAutoClient {
 		
 		pingEntry = robotData.getEntry("ping");
 		robotTickEntry = robotData.getEntry("tick");
+		syncStopTickEntry = robotData.getEntry("syncStopTick");
+		tickIntervalMsEntry = robotData.getEntry("tickIntervalMs");
 		robotTickTimerEntry = robotData.getEntry("tickTimer");
-		
+		bufferSizeEntry = robotData.getEntry("bufferSize");
+		talonModesEntry = robotData.getEntry("talonModes");
+		managerModeEntry = robotData.getEntry("managerMode");
+		robotReadyEntry = robotData.getEntry("robotReady");
+		clientIsReadyEntry = robotData.getEntry("clientIsReady");
+		recordingNameEntry = robotData.getEntry("recordingName");
 		inst.startClientTeam(4456);
 		
 		waitForConnection(); // maybe replace with inst.addConnectionListener(...);
@@ -65,11 +82,20 @@ public class DSAutoClient {
 	}
 	
 	private void onTimer(double timerVal) {
+		
 		System.out.println("Timer val: " + timerVal);
+		
+		/* move to end later */
 		if (!pingEntry.getBoolean(true)) {
 			System.out.println("Robot->Client ping received! Sending pong...");
 			pingEntry.setBoolean(true);
 		}
+		
+		// testing
+		if (managerModeEntry.getString("").equals("RECORD_RUNNING")) {
+			System.out.println("RECORD_RUNNING");
+		}
+		
 	}
 	
 }
