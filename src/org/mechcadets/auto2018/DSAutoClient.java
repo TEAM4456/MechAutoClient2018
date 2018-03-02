@@ -1,6 +1,8 @@
 package org.mechcadets.auto2018;
 
 import java.util.Scanner;
+import java.util.Map;
+import java.util.HashMap;
 
 import edu.wpi.first.networktables.EntryListenerFlags;
 import edu.wpi.first.networktables.NetworkTable;
@@ -9,11 +11,14 @@ import edu.wpi.first.networktables.NetworkTableInstance;
 
 public class DSAutoClient {
 	
-	private static final Scanner SCAN = new Scanner(System.in);
+	private boolean recordingRunning;
+	private boolean playbackRunning;
+	
+	private int clientTick;
+	
+	private AutoRecording recording;
 	
 	private static NetworkTableInstance inst;
-	
-	private static int tick;
 	
 	private NetworkTable autonomousData;
 	private NetworkTable robotData;
@@ -23,19 +28,22 @@ public class DSAutoClient {
 	private NetworkTableEntry robotTickEntry;
 	private NetworkTableEntry syncStopTickEntry;
 	private NetworkTableEntry tickIntervalMsEntry;
-	private NetworkTableEntry robotTickTimerEntry;
+	private NetworkTableEntry tickTimerEntry;
 	private NetworkTableEntry bufferSizeEntry;
 	private NetworkTableEntry talonModesEntry;
 	private NetworkTableEntry managerModeEntry;
-	private NetworkTableEntry robotReadyEntry;
-	private NetworkTableEntry clientIsReadyEntry;
 	private NetworkTableEntry recordingNameEntry;
+	
+	private static final Scanner SCAN = new Scanner(System.in);
 	
 	public static void main(String[] args) { new DSAutoClient().run(); }
 	
 	private void run() {
 		
-		tick = 0;
+		recordingRunning = false;
+		playbackRunning = false;
+		
+		clientTick = 0;
 		
 		inst = NetworkTableInstance.getDefault();
 		
@@ -47,18 +55,17 @@ public class DSAutoClient {
 		robotTickEntry = robotData.getEntry("tick");
 		syncStopTickEntry = robotData.getEntry("syncStopTick");
 		tickIntervalMsEntry = robotData.getEntry("tickIntervalMs");
-		robotTickTimerEntry = robotData.getEntry("tickTimer");
+		tickTimerEntry = robotData.getEntry("tickTimer");
 		bufferSizeEntry = robotData.getEntry("bufferSize");
 		talonModesEntry = robotData.getEntry("talonModes");
 		managerModeEntry = robotData.getEntry("managerMode");
-		robotReadyEntry = robotData.getEntry("robotReady");
-		clientIsReadyEntry = robotData.getEntry("clientIsReady");
 		recordingNameEntry = robotData.getEntry("recordingName");
+		
 		inst.startClientTeam(4456);
 		
 		waitForConnection(); // maybe replace with inst.addConnectionListener(...);
 		
-		int timerListenerHandle = robotTickTimerEntry.addListener(event -> {
+		int timerListenerHandle = tickTimerEntry.addListener(event -> {
 			onTimer(event.value.getDouble());
 		}, EntryListenerFlags.kNew | EntryListenerFlags.kUpdate);
 		
@@ -85,17 +92,101 @@ public class DSAutoClient {
 		
 		System.out.println("Timer val: " + timerVal);
 		
-		/* move to end later */
+		String managerMode = managerModeEntry.getString("");
+		
+		if (managerMode.equals("IDLE")) {
+			if (recordingRunning) {
+				if (!recordingNameEntry.equals("CLIENT::CANCEL_RECORDING")) {
+					System.out.println("Recording stopped. Saving as " + recording.getName() + "...");
+					stopAndSaveRecording(recording);
+				} else {
+					System.out.println("Recording cancelled.");
+					stopRecording();
+				}
+			} else if (playbackRunning) {
+				System.out.println("Playback stopped");
+				playbackRunning = false;
+			}
+		}
+		
+		if (managerMode.equals("RECORD_RUNNING") && !recordingRunning) {
+			recording = startRecording();
+			
+			System.out.println("Recording started.");
+			System.out.println("Recording name: "+ recording.getName());
+			System.out.println("Buffer size: " + recording.getBufferSize());
+			System.out.println("Tick interval (ms): " + recording.getTickIntervalMs());
+			System.out.println("Talon modes: " + recording.getTalonModeMap().toString());
+		}
+		
+		//if (managerMode.equals("PLAYBACK_RUNNING") && !playbackRunning) {}
+		
+		if (recordingRunning) {
+		
+		}
+		
+		//if (playbackRunning) {}
+		
+		pingRobot();
+	}
+	
+	private AutoRecording startRecording() {
+		// debugging
+		if (recordingRunning) {
+			System.err.println("DEBUG: startRecording() called while recording is running!");
+			System.exit(1);
+		} else if (playbackRunning) {
+			System.err.println("DEBUG: startRecording() called while playback is running!");
+			System.exit(1);
+		}
+		
+		String recordingName = recordingNameEntry.getString("");
+		double bufferSize = bufferSizeEntry.getDouble(0);
+		double tickIntervalMs = tickIntervalMsEntry.getDouble(0);
+		String talonModes = talonModesEntry.getString("");
+		
+		Map<String, String> modes = new HashMap<>();
+		for (String talonAndMode : talonModes.split("\\|")) {
+			String[] talonAndModeArray = talonAndMode.split(":");
+			modes.put(talonAndModeArray[0], talonAndModeArray[1]);
+		}
+		
+		recordingRunning = true;
+		
+		return new AutoRecording(recordingName, bufferSize, tickIntervalMs, modes);
+	}
+	
+	private void stopAndSaveRecording(AutoRecording recording) {
+		// debugging
+		if (!recordingRunning) {
+			System.err.println("DEBUG: stopAndSaveRecording() called while recording is not running!");
+			System.exit(1);
+		} else if (playbackRunning) {
+			System.err.println("DEBUG: stopAndSaveRecording() called while playback is running!");
+			System.exit(1);
+		}
+		
+		recordingRunning = false;
+	}
+	
+	private void stopRecording() {
+		// debugging
+		if (!recordingRunning) {
+			System.err.println("DEBUG: stopRecording() called while recording is not running!");
+			System.exit(1);
+		} else if (playbackRunning) {
+			System.err.println("DEBUG: stopRecording() called while playback is running!");
+			System.exit(1);
+		}
+		
+		recordingRunning = false;
+	}
+	
+	private void pingRobot() {
 		if (!pingEntry.getBoolean(true)) {
-			System.out.println("Robot->Client ping received! Sending pong...");
+			System.out.println("Ping received! Sending pong...");
 			pingEntry.setBoolean(true);
 		}
-		
-		// testing
-		if (managerModeEntry.getString("").equals("RECORD_RUNNING")) {
-			System.out.println("RECORD_RUNNING");
-		}
-		
 	}
 	
 }

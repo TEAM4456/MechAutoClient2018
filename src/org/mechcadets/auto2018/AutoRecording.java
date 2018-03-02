@@ -5,24 +5,29 @@ import java.util.HashMap;
 
 public class AutoRecording {
 	
-	private String recordingName;
+	private String name;
 	
-	private int bufferSize;
-	private int tickIntervalMs;
+	private double bufferSize;
+	private double tickIntervalMs;
 	
 	private Map<String, String> talonModeMap; /* <talonName, talonMode> */
 	private Map<Integer, Map<String, Double>> tickMap; /* <tick, <talonName, value>> */
 	
 	public AutoRecording() {
+		name = "";
 		bufferSize = 0;
 		tickIntervalMs = 0;
 		tickMap = new HashMap<>();
+		talonModeMap = new HashMap<>();
 	}
 	
-	public AutoRecording(int recordingBufferSize, int recordingTickIntervalMs) {
+	public AutoRecording(String recordingName, double recordingBufferSize, double recordingTickIntervalMs,
+	                     Map<String, String> modes) {
+		name = recordingName;
 		bufferSize = recordingBufferSize;
 		tickIntervalMs = recordingTickIntervalMs;
 		tickMap = new HashMap<>();
+		talonModeMap = modes;
 	}
 	
 	public void addTick(int tick, Map<String, Double> tickValues) {
@@ -41,19 +46,19 @@ public class AutoRecording {
 		return talonModeMap;
 	}
 	
-	public void setRecordingName(String name) {
-		recordingName = name;
+	public void setName(String name) {
+		name = name;
 	}
 	
-	public String getRecordingName() {
-		return recordingName;
+	public String getName() {
+		return name;
 	}
 	
 	public void setBufferSize(int size) {
 		bufferSize = size;
 	}
 	
-	public int getBufferSize() {
+	public double getBufferSize() {
 		return bufferSize;
 	}
 	
@@ -61,7 +66,7 @@ public class AutoRecording {
 		tickIntervalMs = intervalMs;
 	}
 	
-	public int getTickIntervalMs() {
+	public double getTickIntervalMs() {
 		return tickIntervalMs;
 	}
 	
