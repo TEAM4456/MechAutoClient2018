@@ -31,8 +31,7 @@ public class AutoRecording implements Serializable {
 		FileOutputStream fileOut = null;
 		ObjectOutputStream objectOut = null;
 		try {
-			String filepath = "[FILEPATH REDACTED]";
-			fileOut = new FileOutputStream(filepath + recording.getName() + ".arf");
+			fileOut = new FileOutputStream(recording.getName() + ".arf");
 			objectOut = new ObjectOutputStream(fileOut);
 			objectOut.writeObject(recording);
 		} catch (Exception ex) {

@@ -12,8 +12,8 @@ public class RecordingReader {
 	
 	public static void main(String[] args) {
 	
-		System.out.print("Please enter the filepath of the recording: ");
-		String filepath = SCAN.nextLine();
+		System.out.print("Please enter the filename of the recording: ");
+		String filename = SCAN.nextLine();
 		
 		AutoRecording recording = null;
 		
@@ -22,7 +22,7 @@ public class RecordingReader {
 		
 		try {
 			
-			fileIn = new FileInputStream(filepath);
+			fileIn = new FileInputStream(filename);
 			objectIn = new ObjectInputStream(fileIn);
 			
 			recording = (AutoRecording)objectIn.readObject();
@@ -55,7 +55,7 @@ public class RecordingReader {
 		int stopTick = recording.getStopTick();
 		for (int i = 0; i <= stopTick; i++) {
 			Map<String, Double> tickValues = recording.getTickValues(i);
-			System.out.println("Tick: " + i + ", tickValues: " + tickValues.toString());
+			System.out.println("Tick: " + i + ", values: " + tickValues.toString());
 		}
 	
 	}
