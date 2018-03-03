@@ -118,6 +118,15 @@ public class DSAutoClient {
 			System.out.println("Talon modes: " + recording.getTalonModeMap().toString());
 		}
 		
+		if (managerMode.equals("PLAYBACK_RUNNING") && !playbackRunning) {
+			recording = startPlayback();
+			
+			System.out.println("Playback started.");
+			System.out.println("Recording name: " + recording.getName());
+			System.out.println("Tick interval (ms): " + recording.getTickIntervalMs());
+			System.out.println("Talon modes: " + recording.getTalonModeMap().toString());
+		}
+		
 		//if (managerMode.equals("PLAYBACK_RUNNING") && !playbackRunning) {}
 		
 		if (recordingRunning) {
@@ -136,6 +145,22 @@ public class DSAutoClient {
 				}
 				boolean save = !recordingNameEntry.getString("").equals("CLIENT::CANCEL_RECORDING");
 				stopRecording(save);
+			}
+		}
+		
+		if (playbackRunning) {
+			double robotTick = robotTickEntry.getDouble(0);
+			double syncStopTick = syncStopTickEntry.getDouble(0);
+			
+			while (clientTick < robotTick + bufferSize - 1) {
+				Map<String, Double> tickValues = recording.getTickValues(clientTick);
+				for (Map.Entry<String, Double> entry : tickValues.entrySet()) {
+					writeToTalonBuffer(entry.getKey(), clientTick, entry.getValue());
+				}
+				if (clientTick >= syncStopTick) {
+					stopPlayback();
+				}
+				clientTick++;
 			}
 		}
 		
@@ -166,12 +191,17 @@ public class DSAutoClient {
 		return talonBufferArray[talonList.indexOf(talonName)][tick % (int)bufferSize].getDouble(0);
 	}
 	
+	private void writeToTalonBuffer(String talonName, int tick, double value) {
+		talonBufferArray[talonList.indexOf(talonName)][tick % (int)bufferSize].setDouble(value);
+	}
+	
 	private AutoRecording startRecording() {
 		// debugging
 		if (recordingRunning) {
 			System.err.println("DEBUG: startRecording() called while recording is running!");
 			System.exit(1);
-		} else if (playbackRunning) {
+		}
+		if (playbackRunning) {
 			System.err.println("DEBUG: startRecording() called while playback is running!");
 			System.exit(1);
 		}
@@ -193,11 +223,51 @@ public class DSAutoClient {
 		recordingRunning = true;
 		
 		talonBufferArray = new NetworkTableEntry[talonList.size()][];
-		for (int i = 0; i < modes.size(); i++) {
+		for (int i = 0; i < talonList.size(); i++) {
 			talonBufferArray[i] = getBufferEntriesForTalon(talonList.get(i));
 		}
 		
 		return new AutoRecording(recordingName, tickIntervalMs, modes);
+	}
+	
+	private AutoRecording startPlayback() {
+		// debugging
+		if (playbackRunning) {
+			System.err.println("DEBUG: startPlayback() called while playback is running!");
+			System.exit(1);
+		}
+		if (recordingRunning) {
+			System.err.println("DEBUG: startPlayback() called while recording is running!");
+			System.exit(1);
+		}
+		
+		String recordingName = recordingNameEntry.getString("");
+		
+		recording = AutoRecording.loadRecording(recordingName);
+		
+		tickIntervalMsEntry.setDouble(recording.getTickIntervalMs());
+		syncStopTickEntry.setDouble(recording.getStopTick());
+		
+		Map<String, String> modes = recording.getTalonModeMap();
+		String modesString = "";
+		talonList.clear();
+		for (Map.Entry<String, String> mode : modes.entrySet()) {
+			talonList.add(mode.getKey());
+			modesString += mode.getKey() + ":" + mode.getValue() + "|";
+		}
+		modesString = modesString.substring(0, modesString.length() - 1); // remove trailing delimiter
+		talonModesEntry.setString(modesString);
+		
+		clientTick = 0;
+		bufferSize = bufferSizeEntry.getDouble(0);
+		playbackRunning = true;
+		
+		talonBufferArray = new NetworkTableEntry[talonList.size()][];
+		for (int i = 0; i < talonList.size(); i++) {
+			talonBufferArray[i] = getBufferEntriesForTalon(talonList.get(i));
+		}
+		
+		return recording;
 	}
 	
 	private void stopRecording(boolean saveRecording) {
@@ -220,6 +290,20 @@ public class DSAutoClient {
 		}
 		
 		recordingRunning = false;
+	}
+	
+	private void stopPlayback() {
+		// debugging
+		if (!playbackRunning) {
+			System.err.println("DEBUG: stopPlayback() called while playback is not running!");
+			System.exit(1);
+		}
+		if (recordingRunning) {
+			System.err.println("DEBUG: stopPlayback() called while recording is running!");
+			System.exit(1);
+		}
+		
+		playbackRunning = false;
 	}
 	
 	private void pingRobot() {

@@ -1,11 +1,8 @@
 package org.mechcadets.auto2018;
 
+import java.io.*;
 import java.util.Map;
 import java.util.HashMap;
-import java.io.Serializable;
-import java.io.IOException;
-import java.io.FileOutputStream;
-import java.io.ObjectOutputStream;
 
 public class AutoRecording implements Serializable {
 	
@@ -52,6 +49,36 @@ public class AutoRecording implements Serializable {
 				}
 			}
 		}
+	}
+	
+	public static AutoRecording loadRecording(String recordingName) {
+		AutoRecording recording = null;
+		FileInputStream fileIn = null;
+		ObjectInputStream objectIn = null;
+		try {
+			fileIn = new FileInputStream(recordingName + ".arf");
+			objectIn = new ObjectInputStream(fileIn);
+			recording = (AutoRecording)objectIn.readObject();
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		} finally {
+			if (fileIn != null) {
+				try {
+					fileIn.close();
+				} catch (IOException ex) {
+					ex.printStackTrace();
+				}
+			}
+			if (objectIn != null) {
+				try {
+					objectIn.close();
+				} catch (IOException ex) {
+					ex.printStackTrace();
+				}
+			}
+		}
+		
+		return recording;
 	}
 	
 	public void setStopTick(int tick) {
