@@ -15,7 +15,7 @@ public class DSAutoClient {
 	
 	/*
 	This program was not made as robustly as the robot's portion.
-	If something looks like spaghetti, that's because it probably is.
+	It's not necessarily spaghetti, but definitely not as robust.
 	*/
 	
 	private boolean recordingRunning;
@@ -39,8 +39,7 @@ public class DSAutoClient {
 	private NetworkTableEntry pingEntry;
 	private NetworkTableEntry robotTickEntry;
 	private NetworkTableEntry syncStopTickEntry;
-	private NetworkTableEntry tickIntervalMsEntry;
-	private NetworkTableEntry tickTimerEntry;
+	private NetworkTableEntry intervalEntry;
 	private NetworkTableEntry bufferSizeEntry;
 	private NetworkTableEntry talonModesEntry;
 	private NetworkTableEntry managerModeEntry;
@@ -69,8 +68,7 @@ public class DSAutoClient {
 		pingEntry = robotData.getEntry("ping");
 		robotTickEntry = robotData.getEntry("tick");
 		syncStopTickEntry = robotData.getEntry("syncStopTick");
-		tickIntervalMsEntry = robotData.getEntry("tickIntervalMs");
-		tickTimerEntry = robotData.getEntry("tickTimer");
+		intervalEntry = robotData.getEntry("interval");
 		bufferSizeEntry = robotData.getEntry("bufferSize");
 		talonModesEntry = robotData.getEntry("talonModes");
 		managerModeEntry = robotData.getEntry("managerMode");
@@ -80,9 +78,9 @@ public class DSAutoClient {
 		
 		waitForConnection(); // maybe replace with inst.addConnectionListener(...);
 		
-		int timerListenerHandle = tickTimerEntry.addListener(event -> {
-			onTimer(event.value.getDouble());
-		}, EntryListenerFlags.kNew | EntryListenerFlags.kUpdate);
+		int pingListenerHandle = pingEntry.addListener(event -> {
+			onPing(event.value.getBoolean());
+		}, EntryListenerFlags.kNew | EntryListenerFlags.kImmediate | EntryListenerFlags.kUpdate);
 		
 		do {
 			System.out.println("Enter 'quit' to exit.");
@@ -103,9 +101,9 @@ public class DSAutoClient {
 		}
 	}
 	
-	private void onTimer(double timerVal) {
+	private void onPing(boolean ping) {
 		
-		System.out.println("Timer val: " + timerVal);
+		// TODO: handle unexpected recording/playback stops
 		
 		String managerMode = managerModeEntry.getString("");
 		
@@ -114,7 +112,7 @@ public class DSAutoClient {
 			
 			System.out.println("Recording started.");
 			System.out.println("Recording name: "+ recording.getName());
-			System.out.println("Tick interval (ms): " + recording.getTickIntervalMs());
+			System.out.println("Interval: " + recording.getInterval());
 			System.out.println("Talon modes: " + recording.getTalonModeMap().toString());
 		}
 		
@@ -123,12 +121,10 @@ public class DSAutoClient {
 			
 			System.out.println("Playback started.");
 			System.out.println("Recording name: " + recording.getName());
-			System.out.println("Tick interval (ms): " + recording.getTickIntervalMs());
+			System.out.println("Interval: " + recording.getInterval());
 			System.out.println("Talon modes: " + recording.getTalonModeMap().toString());
 		}
-		
-		//if (managerMode.equals("PLAYBACK_RUNNING") && !playbackRunning) {}
-		
+
 		if (recordingRunning) {
 			double robotTick = robotTickEntry.getDouble(0);
 			double syncStopTick = syncStopTickEntry.getDouble(-1);
@@ -164,9 +160,19 @@ public class DSAutoClient {
 			}
 		}
 		
-		//if (playbackRunning) {}
+		if (recordingRunning && managerMode.equals("IDLE")) {
+			System.out.println("WARNING: Recording stopped unexpectedly. Cancelling recording.");
+			stopRecording(false);
+		}
+		if (playbackRunning && managerMode.equals("IDLE")) {
+			System.out.println("WARNING: Playback stopped unexpectedly.");
+			stopPlayback();
+		}
 		
-		pingRobot();
+		if (!ping) {
+			System.out.println("Ping received! Sending pong...");
+			pingEntry.setBoolean(true);
+		}
 	}
 	
 	private NetworkTableEntry[] getBufferEntriesForTalon(String talonName) {
@@ -196,18 +202,17 @@ public class DSAutoClient {
 	}
 	
 	private AutoRecording startRecording() {
-		// debugging
 		if (recordingRunning) {
-			System.err.println("DEBUG: startRecording() called while recording is running!");
+			System.err.println("ERROR: startRecording() called while recording is running!");
 			System.exit(1);
 		}
 		if (playbackRunning) {
-			System.err.println("DEBUG: startRecording() called while playback is running!");
+			System.err.println("ERROR: startRecording() called while playback is running!");
 			System.exit(1);
 		}
 		
 		String recordingName = recordingNameEntry.getString("");
-		double tickIntervalMs = tickIntervalMsEntry.getDouble(0);
+		double tickIntervalMs = intervalEntry.getDouble(0);
 		String talonModes = talonModesEntry.getString("");
 		
 		talonList.clear();
@@ -231,13 +236,12 @@ public class DSAutoClient {
 	}
 	
 	private AutoRecording startPlayback() {
-		// debugging
 		if (playbackRunning) {
-			System.err.println("DEBUG: startPlayback() called while playback is running!");
+			System.err.println("ERROR: startPlayback() called while playback is running!");
 			System.exit(1);
 		}
 		if (recordingRunning) {
-			System.err.println("DEBUG: startPlayback() called while recording is running!");
+			System.err.println("ERROR: startPlayback() called while recording is running!");
 			System.exit(1);
 		}
 		
@@ -245,7 +249,7 @@ public class DSAutoClient {
 		
 		recording = AutoRecording.loadRecording(recordingName);
 		
-		tickIntervalMsEntry.setDouble(recording.getTickIntervalMs());
+		intervalEntry.setDouble(recording.getInterval());
 		syncStopTickEntry.setDouble(recording.getStopTick());
 		
 		Map<String, String> modes = recording.getTalonModeMap();
@@ -271,12 +275,11 @@ public class DSAutoClient {
 	}
 	
 	private void stopRecording(boolean saveRecording) {
-		// debugging
 		if (!recordingRunning) {
-			System.err.println("DEBUG: stopRecording() called while recording is not running!");
+			System.err.println("ERROR: stopRecording() called while recording is not running!");
 			System.exit(1);
 		} else if (playbackRunning) {
-			System.err.println("DEBUG: stopRecording() called while playback is running!");
+			System.err.println("ERROR: stopRecording() called while playback is running!");
 			System.exit(1);
 		}
 		
@@ -293,24 +296,16 @@ public class DSAutoClient {
 	}
 	
 	private void stopPlayback() {
-		// debugging
 		if (!playbackRunning) {
-			System.err.println("DEBUG: stopPlayback() called while playback is not running!");
+			System.err.println("ERROR: stopPlayback() called while playback is not running!");
 			System.exit(1);
 		}
 		if (recordingRunning) {
-			System.err.println("DEBUG: stopPlayback() called while recording is running!");
+			System.err.println("ERROR: stopPlayback() called while recording is running!");
 			System.exit(1);
 		}
 		
 		playbackRunning = false;
-	}
-	
-	private void pingRobot() {
-		if (!pingEntry.getBoolean(true)) {
-			System.out.println("Ping received! Sending pong...");
-			pingEntry.setBoolean(true);
-		}
 	}
 	
 }

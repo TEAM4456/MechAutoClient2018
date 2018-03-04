@@ -47,7 +47,7 @@ public class RecordingReader {
 		}
 		
 		System.out.println("Recording name: " + recording.getName());
-		System.out.println("Tick interval (ms): " + recording.getTickIntervalMs());
+		System.out.println("Interval: " + recording.getInterval());
 		System.out.println("Stop tick: " + recording.getStopTick());
 		System.out.println("Talon modes: " + recording.getTalonModeMap().toString());
 		

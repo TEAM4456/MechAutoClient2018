@@ -10,15 +10,15 @@ public class AutoRecording implements Serializable {
 	
 	private String name;
 	
-	private double tickIntervalMs;
+	private double interval;
 	private int stopTick;
 	
 	private Map<String, String> talonModeMap; /* <talonName, talonMode> */
 	private Map<Integer, Map<String, Double>> tickMap; /* <tick, <talonName, value>> */
 	
-	public AutoRecording(String recordingName, double recordingTickIntervalMs, Map<String, String> modes) {
+	public AutoRecording(String recordingName, double recordingInterval, Map<String, String> modes) {
 		name = recordingName;
-		tickIntervalMs = recordingTickIntervalMs;
+		interval = recordingInterval;
 		stopTick = 0;
 		tickMap = new HashMap<>();
 		talonModeMap = modes;
@@ -105,8 +105,8 @@ public class AutoRecording implements Serializable {
 		return name;
 	}
 	
-	public double getTickIntervalMs() {
-		return tickIntervalMs;
+	public double getInterval() {
+		return interval;
 	}
 	
 }
