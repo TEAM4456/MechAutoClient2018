@@ -36,6 +36,7 @@ public class DSAutoClient {
 	
 	private NetworkTableEntry[][] talonBufferArray;
 	
+	private NetworkTableEntry robotEnabledEntry;
 	private NetworkTableEntry pingEntry;
 	private NetworkTableEntry robotTickEntry;
 	private NetworkTableEntry syncStopTickEntry;
@@ -65,6 +66,7 @@ public class DSAutoClient {
 		robotData = autonomousData.getSubTable("RobotState");
 		bufferData = autonomousData.getSubTable("BufferData");
 		
+		robotEnabledEntry = robotData.getEntry("enabled");
 		pingEntry = robotData.getEntry("ping");
 		robotTickEntry = robotData.getEntry("tick");
 		syncStopTickEntry = robotData.getEntry("syncStopTick");
@@ -78,6 +80,9 @@ public class DSAutoClient {
 		
 		waitForConnection(); // maybe replace with inst.addConnectionListener(...);
 		
+		int robotEnabledListenerHandle = robotEnabledEntry.addListener(event -> {
+			onEnabledUpdate(event.value.getBoolean());
+		}, EntryListenerFlags.kNew | EntryListenerFlags.kImmediate | EntryListenerFlags.kUpdate);
 		int pingListenerHandle = pingEntry.addListener(event -> {
 			onPing(event.value.getBoolean());
 		}, EntryListenerFlags.kNew | EntryListenerFlags.kImmediate | EntryListenerFlags.kUpdate);
@@ -101,13 +106,26 @@ public class DSAutoClient {
 		}
 	}
 	
+	private void onEnabledUpdate(boolean enabled) {
+		if (!enabled) {
+			if (recordingRunning) {
+				System.out.println("WARNING: robot disabled while recording! Cancelling recording...");
+				stopRecording(false);
+			} else if (playbackRunning) {
+				System.out.println("WARNING: robot disabled during playback! Stopping playback.");
+				stopPlayback();
+			}
+		}
+	}
+	
 	private void onPing(boolean ping) {
 		
-		// TODO: handle unexpected recording/playback stops
-		
 		String managerMode = managerModeEntry.getString("");
+		double robotTick = robotTickEntry.getDouble(0);
+		double syncStopTick = syncStopTickEntry.getDouble(-1);
 		
-		if (managerMode.equals("RECORD_RUNNING") && !recordingRunning) {
+		if (managerMode.equals("RECORD_RUNNING") && !recordingRunning &&
+				(robotTick < syncStopTick || syncStopTick == -1)) {
 			recording = startRecording();
 			
 			System.out.println("Recording started.");
@@ -116,7 +134,8 @@ public class DSAutoClient {
 			System.out.println("Talon modes: " + recording.getTalonModeMap().toString());
 		}
 		
-		if (managerMode.equals("PLAYBACK_RUNNING") && !playbackRunning) {
+		if (managerMode.equals("PLAYBACK_RUNNING") && !playbackRunning &&
+				(robotTick <= syncStopTick || syncStopTick == -1)) {
 			recording = startPlayback();
 			
 			System.out.println("Playback started.");
@@ -124,11 +143,8 @@ public class DSAutoClient {
 			System.out.println("Interval: " + recording.getInterval());
 			System.out.println("Talon modes: " + recording.getTalonModeMap().toString());
 		}
-
+		
 		if (recordingRunning) {
-			double robotTick = robotTickEntry.getDouble(0);
-			double syncStopTick = syncStopTickEntry.getDouble(-1);
-			
 			if (syncStopTick == -1) {
 				while (clientTick < robotTick) {
 					recording.addTick(clientTick, getValuesForTick(clientTick));
@@ -145,28 +161,20 @@ public class DSAutoClient {
 		}
 		
 		if (playbackRunning) {
-			double robotTick = robotTickEntry.getDouble(0);
-			double syncStopTick = syncStopTickEntry.getDouble(0);
-			
+			if (clientTick >= syncStopTick) {
+				System.out.println("STOPPING PLAYBACK.");
+				stopPlayback();
+			}
 			while (clientTick < robotTick + bufferSize - 1) {
+				if (clientTick >= syncStopTick) {
+					break;
+				}
 				Map<String, Double> tickValues = recording.getTickValues(clientTick);
 				for (Map.Entry<String, Double> entry : tickValues.entrySet()) {
 					writeToTalonBuffer(entry.getKey(), clientTick, entry.getValue());
 				}
-				if (clientTick >= syncStopTick) {
-					stopPlayback();
-				}
 				clientTick++;
 			}
-		}
-		
-		if (recordingRunning && managerMode.equals("IDLE")) {
-			System.out.println("WARNING: Recording stopped unexpectedly. Cancelling recording.");
-			stopRecording(false);
-		}
-		if (playbackRunning && managerMode.equals("IDLE")) {
-			System.out.println("WARNING: Playback stopped unexpectedly.");
-			stopPlayback();
 		}
 		
 		if (!ping) {
