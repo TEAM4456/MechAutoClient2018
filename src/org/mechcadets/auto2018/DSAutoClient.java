@@ -1,6 +1,5 @@
 package org.mechcadets.auto2018;
 
-import java.util.Scanner;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
@@ -16,7 +15,19 @@ public class DSAutoClient {
 	/*
 	This program was not made as robustly as the robot's portion.
 	It's not necessarily spaghetti, but definitely not as robust.
+	
+	Known bugs:
+		- if playback is stopped too quickly after starting, client will never start playback again until restart
+			- possible causes:
+				- playback is stopped before client gets another ping from robot (onPing() isn't called yet)
+				- playback is stopped within n < bufferSize ticks
 	*/
+	
+	private final int TIMEOUT_S = 2;
+	private final int LOOP_WAIT_MS = 100;
+	
+	private String lastMessage;
+	private long messageRepeatCounter;
 	
 	private boolean recordingRunning;
 	private boolean playbackRunning;
@@ -24,17 +35,17 @@ public class DSAutoClient {
 	private int clientTick;
 	private double bufferSize;
 	
+	private long timeoutCounter;
+	
 	private List<String> talonList;
 	
 	private AutoRecording recording;
 	
-	private static NetworkTableInstance inst;
+	private NetworkTableInstance inst;
 	
 	private NetworkTable autonomousData;
 	private NetworkTable robotData;
 	private NetworkTable bufferData;
-	
-	private NetworkTableEntry[][] talonBufferArray;
 	
 	private NetworkTableEntry robotEnabledEntry;
 	private NetworkTableEntry pingEntry;
@@ -46,11 +57,14 @@ public class DSAutoClient {
 	private NetworkTableEntry managerModeEntry;
 	private NetworkTableEntry recordingNameEntry;
 	
-	private static final Scanner SCAN = new Scanner(System.in);
+	private NetworkTableEntry[][] talonBufferArray;
 	
 	public static void main(String[] args) { new DSAutoClient().run(); }
 	
 	private void run() {
+		
+		lastMessage = "";
+		messageRepeatCounter = 1;
 		
 		recordingRunning = false;
 		playbackRunning = false;
@@ -78,7 +92,7 @@ public class DSAutoClient {
 		
 		inst.startClientTeam(4456);
 		
-		waitForConnection(); // maybe replace with inst.addConnectionListener(...);
+		waitForConnection();
 		
 		int robotEnabledListenerHandle = robotEnabledEntry.addListener(event -> {
 			onEnabledUpdate(event.value.getBoolean());
@@ -87,21 +101,51 @@ public class DSAutoClient {
 			onPing(event.value.getBoolean());
 		}, EntryListenerFlags.kNew | EntryListenerFlags.kImmediate | EntryListenerFlags.kUpdate);
 		
-		do {
-			System.out.println("Enter 'quit' to exit.");
-		} while (!SCAN.nextLine().toLowerCase().equals("quit"));
+		while (true) {
+			if (timeoutCounter > (TIMEOUT_S * 1000) / LOOP_WAIT_MS) {
+				if (recordingRunning) {
+					printMessage("WARNING: timeout time exceeded while recording! Cancelling recording...");
+					stopRecording(false);
+				} else if (playbackRunning) {
+					printMessage("WARNING: timeout time exceeded during playback! Stopping playback.");
+					stopPlayback();
+				} else {
+					printMessage("WARNING: timeout time exceeded while idle!");
+				}
+			}
+			timeoutCounter++;
+			try {
+				Thread.sleep(LOOP_WAIT_MS);
+			} catch (InterruptedException ex) {
+				printMessage("Interrupted during main loop.\nExiting...");
+				robotEnabledEntry.removeListener(robotEnabledListenerHandle); // just to be safe
+				pingEntry.removeListener(pingListenerHandle); // just to be safe
+				System.exit(0);
+			}
+		}
 		
+	}
+	
+	private void printMessage(String message) {
+		if (!message.equals(lastMessage)) {
+			lastMessage = message;
+			System.out.println(message);
+			messageRepeatCounter = 1;
+		} else {
+			messageRepeatCounter++;
+			System.out.println(message + " (x" + messageRepeatCounter + ")");
+		}
 	}
 	
 	private void waitForConnection() {
 		try {
 			while (!inst.isConnected()) {
-				System.out.println("Waiting for connection...");
-				Thread.sleep(100);
+				printMessage("Waiting for connection...");
+				Thread.sleep(LOOP_WAIT_MS);
 			}
-			System.out.println("Connected!");
+			printMessage("Connected!");
 		} catch (InterruptedException ex) {
-			System.out.println("Interrupted while waiting for connection.\nExiting...");
+			printMessage("Interrupted while waiting for connection.\nExiting...");
 			System.exit(0);
 		}
 	}
@@ -109,10 +153,10 @@ public class DSAutoClient {
 	private void onEnabledUpdate(boolean enabled) {
 		if (!enabled) {
 			if (recordingRunning) {
-				System.out.println("WARNING: robot disabled while recording! Cancelling recording...");
+				printMessage("WARNING: robot disabled while recording! Cancelling recording...");
 				stopRecording(false);
 			} else if (playbackRunning) {
-				System.out.println("WARNING: robot disabled during playback! Stopping playback.");
+				printMessage("WARNING: robot disabled during playback! Stopping playback.");
 				stopPlayback();
 			}
 		}
@@ -125,23 +169,23 @@ public class DSAutoClient {
 		double syncStopTick = syncStopTickEntry.getDouble(-1);
 		
 		if (managerMode.equals("RECORD_RUNNING") && !recordingRunning &&
-				(robotTick < syncStopTick || syncStopTick == -1)) {
+				(robotTick <= syncStopTick - bufferSize || syncStopTick == -1)) {
 			recording = startRecording();
 			
-			System.out.println("Recording started.");
-			System.out.println("Recording name: "+ recording.getName());
-			System.out.println("Interval: " + recording.getInterval());
-			System.out.println("Talon modes: " + recording.getTalonModeMap().toString());
+			printMessage("Recording started.");
+			printMessage("Recording name: "+ recording.getName());
+			printMessage("Interval: " + recording.getInterval());
+			printMessage("Talon modes: " + recording.getTalonModeMap().toString());
 		}
 		
 		if (managerMode.equals("PLAYBACK_RUNNING") && !playbackRunning &&
-				(robotTick <= syncStopTick || syncStopTick == -1)) {
+				(robotTick <= syncStopTick - bufferSize || syncStopTick == -1)) {
 			recording = startPlayback();
 			
-			System.out.println("Playback started.");
-			System.out.println("Recording name: " + recording.getName());
-			System.out.println("Interval: " + recording.getInterval());
-			System.out.println("Talon modes: " + recording.getTalonModeMap().toString());
+			printMessage("Playback started.");
+			printMessage("Recording name: " + recording.getName());
+			printMessage("Interval: " + recording.getInterval());
+			printMessage("Talon modes: " + recording.getTalonModeMap().toString());
 		}
 		
 		if (recordingRunning) {
@@ -162,7 +206,7 @@ public class DSAutoClient {
 		
 		if (playbackRunning) {
 			if (clientTick >= syncStopTick) {
-				System.out.println("STOPPING PLAYBACK.");
+				printMessage("STOPPING PLAYBACK.");
 				stopPlayback();
 			}
 			while (clientTick < robotTick + bufferSize - 1) {
@@ -178,9 +222,11 @@ public class DSAutoClient {
 		}
 		
 		if (!ping) {
-			System.out.println("Ping received! Sending pong...");
+			printMessage("Ping received! Sending pong...");
 			pingEntry.setBoolean(true);
 		}
+		
+		timeoutCounter = 0;
 	}
 	
 	private NetworkTableEntry[] getBufferEntriesForTalon(String talonName) {
@@ -295,9 +341,9 @@ public class DSAutoClient {
 		
 		if (saveRecording) {
 			AutoRecording.saveRecording(recording);
-			System.out.println("Recording saved.");
+			printMessage("Recording saved.");
 		} else {
-			System.out.println("Recording cancelled.");
+			printMessage("Recording cancelled.");
 		}
 		
 		recordingRunning = false;
