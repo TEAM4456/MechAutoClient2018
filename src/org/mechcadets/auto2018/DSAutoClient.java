@@ -21,6 +21,7 @@ public class DSAutoClient {
 			- possible causes:
 				- playback is stopped before client gets another ping from robot (onPing() isn't called yet)
 				- playback is stopped within n < bufferSize ticks
+			- UPDATE: may not be client issue, evidence points to possibly being an issue in AutonomousHandler
 	*/
 	
 	private final int TIMEOUT_S = 2;
